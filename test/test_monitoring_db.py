@@ -51,7 +51,7 @@ class TestMonitoringDB(TestDBBase, unittest.TestCase):
         self.assertGreater(Monitoring.row_count(self.db), 0)
 
     def test_garmin_mon_db_steps_bounds(self):
-        min = Monitoring.get_col_min(self.db, Monitoring.steps)
+        min = Monitoring.get_col_min(self.db, Monitoring.steps, ignore_le_zero=True)
         self.assertGreater(min, 0)
         max = Monitoring.get_col_max(self.db, Monitoring.steps)
         self.assertGreater(max, 0)

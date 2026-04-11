@@ -27,35 +27,41 @@ class TestProfileFile(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.gc_config = GarminConnectConfigManager()
-        cls.file_path = 'test_files'
+        cls.file_path = cls.gc_config.get_fit_files_dir()
+        cls.expected_db = GarminDb(cls.gc_config.get_db_params())
+
+    def process_or_skip(self, profile_data):
+        if profile_data.file_count() == 0:
+            self.skipTest(f'No {profile_data.__class__.__name__} files found in {self.file_path}')
+        profile_data.process()
 
     def test_parse_usersettings(self):
         db_params = self.gc_config.get_db_params(test_db=True)
         gus = GarminUserSettings(db_params, self.file_path, debug=2)
-        if gus.file_count() > 0:
-            gus.process()
+        self.process_or_skip(gus)
         gdb = GarminDb(db_params)
         measurement_system = Attributes.measurements_type(gdb)
-        self.assertEqual(measurement_system, fitfile.field_enums.DisplayMeasure.statute,
-                         'DisplayMeasure expected %r found %r from %r' % (fitfile.field_enums.DisplayMeasure.statute, measurement_system, gus.file_names))
+        expected = Attributes.measurements_type(self.expected_db)
+        self.assertEqual(measurement_system, expected,
+                         'DisplayMeasure expected %r found %r from %r' % (expected, measurement_system, gus.file_names))
 
     def test_parse_personalinfo(self):
         db_params = self.gc_config.get_db_params(test_db=True)
         gpi = GarminPersonalInformation(db_params, self.file_path, debug=2)
-        if gpi.file_count() > 0:
-            gpi.process()
+        self.process_or_skip(gpi)
         gdb = GarminDb(db_params)
         locale = Attributes.get_string(gdb, 'locale')
-        self.assertEqual(locale, 'en', 'locale expected %r found %r from %r' % ('en', locale, gpi.file_names))
+        expected = Attributes.get_string(self.expected_db, 'locale')
+        self.assertEqual(locale, expected, 'locale expected %r found %r from %r' % (expected, locale, gpi.file_names))
 
     def test_parse_socialprofile(self):
         db_params = self.gc_config.get_db_params(test_db=True)
         gsp = GarminSocialProfile(db_params, self.file_path, debug=2)
-        if gsp.file_count() > 0:
-            gsp.process()
+        self.process_or_skip(gsp)
         gdb = GarminDb(db_params)
         id = Attributes.get_string(gdb, 'id')
-        self.assertEqual(id, '346745092', 'Id expected %r found %r from %r' % ('346745092', id, gsp.file_names))
+        expected = Attributes.get_string(self.expected_db, 'id')
+        self.assertEqual(id, expected, 'Id expected %r found %r from %r' % (expected, id, gsp.file_names))
 
 
 if __name__ == '__main__':
