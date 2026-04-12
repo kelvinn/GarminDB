@@ -31,7 +31,7 @@ class TestGarminDb(TestDBBase, unittest.TestCase):
         gc_config = GarminConnectConfigManager()
         db_params = gc_config.get_db_params()
         cls.test_db_params = gc_config.get_db_params(test_db=True)
-        print(f"db params {repr(cls.test_db_params)}")
+        print(f"db params {cls.safe_repr(cls.test_db_params)}")
         cls.garmin_db = GarminDb(db_params)
         cls.measurement_system = fitfile.field_enums.DisplayMeasure.statute
         table_dict = {
@@ -130,7 +130,11 @@ class TestGarminDb(TestDBBase, unittest.TestCase):
         gfd = GarminSleepFitData('test_files/fit/sleep', latest=False, measurement_system=self.measurement_system, debug=2)
         self.gfd_file_count = gfd.file_count()
         if gfd.file_count() > 0:
-            gfd.process_files(SleepFitFileProcessor(self.test_db_params))
+            processor = SleepFitFileProcessor(self.test_db_params)
+            try:
+                gfd.process_files(processor)
+            finally:
+                self.dispose_dbs(processor)
 
 
 if __name__ == '__main__':

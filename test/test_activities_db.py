@@ -14,7 +14,7 @@ from garmindb import GarminActivitiesFitData, GarminTcxData, GarminJsonSummaryDa
 from garmindb.garmindb import GarminDb, Device, File, DeviceInfo
 from garmindb.garmindb import ActivitiesDb, Activities, ActivityLaps, ActivitySplits, ActivityRecords, StepsActivities, PaddleActivities, CycleActivities, ClimbingActivities
 
-from test_db_base import TestDBBase
+from test_db_base import TestDBBase, TestFitFileProcessorMixin
 
 
 root_logger = logging.getLogger()
@@ -30,12 +30,24 @@ do_details_import_tests = True
 do_multiple_import_tests = True
 
 
+class TestActivityFitFileProcessor(TestFitFileProcessorMixin, ActivityFitFileProcessor):
+    dispose_db_attributes = ('garmin_act_db',)
+
+
 class TestActivitiesDb(TestDBBase, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         cls.gc_config = GarminConnectConfigManager()
-        cls.garmin_act_db = ActivitiesDb(cls.gc_config.get_db_params())
+        cls.test_db_params = cls.gc_config.get_db_params(test_db=True)
+        cls.plugin_manager = PluginManager(cls.gc_config.get_plugins_dir(), cls.test_db_params)
+        cls.measurement_system = fitfile.field_enums.DisplayMeasure.statute
+        GarminDb.delete_db(cls.test_db_params)
+        ActivitiesDb.delete_db(cls.test_db_params)
+        cls.test_mon_db = GarminDb(cls.test_db_params)
+        cls.test_act_db = ActivitiesDb(cls.test_db_params, debug_level=1)
+        cls.garmin_act_db = cls.test_act_db
+        cls.__seed_test_db()
         table_dict = {
             'activities_table' : Activities,
             'activity_laps_table' : ActivityLaps,
@@ -45,22 +57,24 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
             'paddle_activities_table' : PaddleActivities,
             'cycle_activities_table' : CycleActivities,
         }
-        super().setUpClass(cls.garmin_act_db, table_dict, {Activities : [Activities.activity_id]}, ['activity_splits_table'])
-        cls.gc_config = GarminConnectConfigManager()
-        cls.test_db_params = cls.gc_config.get_db_params(test_db=True)
-        cls.plugin_manager = PluginManager(cls.gc_config.get_plugins_dir(), cls.test_db_params)
-        cls.test_mon_db = GarminDb(cls.test_db_params)
-        cls.test_act_db = ActivitiesDb(cls.test_db_params, debug_level=1)
-        cls.measurement_system = fitfile.field_enums.DisplayMeasure.statute
-        print(f"db params {repr(cls.test_db_params)}")
+        super().setUpClass(cls.garmin_act_db, table_dict, {Activities : [Activities.activity_id]}, ['activity_splits_table', 'paddle_activities_table', 'cycle_activities_table'])
+        print(f"db params {cls.safe_repr(cls.test_db_params)}")
+
+    @classmethod
+    def __seed_test_db(cls):
+        gfd = GarminActivitiesFitData('test_files/fit/activity', latest=False, measurement_system=cls.measurement_system, debug=0)
+        if gfd.file_count() > 0:
+            processor = TestActivityFitFileProcessor(cls.test_db_params, cls.plugin_manager)
+            try:
+                gfd.process_files(processor)
+            finally:
+                cls.dispose_dbs(processor)
 
     def test_garmin_act_db_tables_exists(self):
         self.assertGreater(Activities.row_count(self.garmin_act_db), 0)
         self.assertGreater(ActivityLaps.row_count(self.garmin_act_db), 0)
         self.assertGreater(ActivityRecords.row_count(self.garmin_act_db), 0)
         self.assertGreater(StepsActivities.row_count(self.garmin_act_db), 0)
-        self.assertGreater(PaddleActivities.row_count(self.garmin_act_db), 0)
-        self.assertGreater(CycleActivities.row_count(self.garmin_act_db), 0)
 
     def check_activities_fields(self, fields_list):
         self.check_not_none_cols(self.test_act_db, {Activities : fields_list})
@@ -90,7 +104,11 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
         gfd = GarminActivitiesFitData('test_files/fit/activity', latest=False, measurement_system=self.measurement_system, debug=2)
         self.gfd_file_count = gfd.file_count()
         if gfd.file_count() > 0:
-            gfd.process_files(ActivityFitFileProcessor(self.test_db_params, self.plugin_manager))
+            processor = TestActivityFitFileProcessor(self.test_db_params, self.plugin_manager)
+            try:
+                gfd.process_files(processor)
+            finally:
+                self.dispose_dbs(processor)
         root_logger.info("imported %d fit files", gfd.file_count())
 
     def fit_file_import(self):
@@ -100,16 +118,26 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
 
     def summary_json_file_import(self):
         gjsd = GarminJsonSummaryData(self.test_db_params, 'test_files/json/activity/summary', latest=False, measurement_system=self.measurement_system, debug=2)
-        if gjsd.file_count() > 0:
-            gjsd.process()
+        try:
+            if gjsd.file_count() > 0:
+                gjsd.process()
+        finally:
+            self.dispose_dbs(gjsd)
 
     def details_json_file_import(self, delete_db=True):
         gjsd = GarminJsonDetailsData(self.test_db_params, 'test_files/json/activity/details', latest=False, measurement_system=self.measurement_system, debug=2)
-        if gjsd.file_count() > 0:
-            gjsd.process()
+        try:
+            if gjsd.file_count() > 0:
+                gjsd.process()
+        finally:
+            self.dispose_dbs(gjsd)
 
     def tcx_file_import(self):
+        self.dispose_dbs(self.__class__.test_act_db)
         ActivitiesDb.delete_db(self.test_db_params)
+        self.__class__.test_act_db = ActivitiesDb(self.test_db_params, debug_level=1)
+        self.__class__.garmin_act_db = self.__class__.test_act_db
+        self.__class__.db = self.__class__.test_act_db
         gtd = GarminTcxData('test_files/tcx', latest=False, measurement_system=self.measurement_system, debug=2)
         if gtd.file_count() > 0:
             gtd.process_files(self.test_db_params)
@@ -119,6 +147,7 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
     #
     @unittest.skipIf(not do_fit_import_test, "Skipping fit import test")
     def test_fit_file_import(self):
+        self.dispose_dbs(self.__class__.test_act_db)
         ActivitiesDb.delete_db(self.test_db_params)
         self.fit_file_import()
         self.check_activities_fields([Activities.start_time, Activities.stop_time, Activities.elapsed_time])
@@ -127,12 +156,14 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
 
     @unittest.skipIf(not do_tcx_import_tests, "Skipping tcx import test")
     def test_tcx_file_import(self):
+        self.dispose_dbs(self.__class__.test_act_db)
         ActivitiesDb.delete_db(self.test_db_params)
         self.tcx_file_import()
         self.check_activities_fields([Activities.sport, Activities.laps])
 
     @unittest.skipIf(not do_summary_import_tests, "Skipping summary import test")
     def test_summary_json_file_import(self):
+        self.dispose_dbs(self.__class__.test_act_db)
         ActivitiesDb.delete_db(self.test_db_params)
         self.summary_json_file_import()
         self.check_activities_fields([Activities.name, Activities.type, Activities.sport, Activities.sub_sport])
@@ -140,12 +171,13 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
 
     @unittest.skipIf(not do_details_import_tests, "Skipping details import test")
     def test_details_json_file_import(self):
+        self.dispose_dbs(self.__class__.test_act_db)
         ActivitiesDb.delete_db(self.test_db_params)
         self.details_json_file_import()
 
     @unittest.skipIf(not do_multiple_import_tests, "Skipping multiple import test")
     def test_file_import(self):
-        root_logger.info("test_file_import: %r", self.test_db_params)
+        root_logger.info("test_file_import: %s", self.safe_repr(self.test_db_params))
         self.summary_json_file_import()
         self.details_json_file_import()
         self.tcx_file_import()

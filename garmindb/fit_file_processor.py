@@ -82,6 +82,8 @@ class FitFileProcessor():
         # Some ordering is important: 1. create new file entries 2. create new device entries
         #
         priority_message_types = [fitfile.MessageType.file_id, fitfile.MessageType.device_info]
+        if hasattr(self, '_write_session_entry') and fitfile.MessageType.session in message_types:
+            priority_message_types.append(fitfile.MessageType.session)
         for message_type in priority_message_types:
             self.__write_message_type(fit_file, message_type)
         for message_type in message_types:
