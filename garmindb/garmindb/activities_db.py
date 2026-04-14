@@ -6,7 +6,7 @@ __license__ = "GPL"
 
 import logging
 import datetime
-from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Time, Enum, ForeignKey, PrimaryKeyConstraint, desc, literal_column
+from sqlalchemy import Column, String, Float, Integer, BigInteger, Boolean, DateTime, Time, Enum, ForeignKey, PrimaryKeyConstraint, desc, literal_column
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -104,12 +104,12 @@ class Activities(ActivitiesDb.Base, ActivitiesCommon):
     name = Column(String)
     description = Column(String)
     type = Column(String)
-    course_id = Column(Integer)
+    course_id = Column(BigInteger)
     laps = Column(Integer)
     sport = Column(String)
     sub_sport = Column(String)
 
-    device_serial_number = Column(Integer)
+    device_serial_number = Column(BigInteger)
 
     self_eval_feel = Column(String)
     self_eval_effort = Column(String)
@@ -326,7 +326,7 @@ class ActivitiesDevices(ActivitiesDb.Base, idbutils.DbObject):
     table_version = 1
 
     activity_id = Column(String)
-    device_serial_number = Column(Integer)
+    device_serial_number = Column(BigInteger)
     __table_args__ = (PrimaryKeyConstraint("activity_id", "device_serial_number"),)
 
     @classmethod
@@ -362,12 +362,12 @@ class SportActivities(idbutils.DbObject):
     @classmethod
     def _create_sport_view(cls, db, selectable, sport):
         """Create a database view for a sport based activity type."""
-        filter = literal_column(f'{Activities.sport} == "{sport}"')
+        filter = literal_column(f"{Activities.__tablename__}.sport = '{sport}'")
         cls.create_join_view(db, f'{sport}_activities_view', selectable, Activities, filter, Activities.start_time.desc())
 
     @classmethod
     def _create_course_view(cls, db, selectable, course_id):
-        filter = literal_column(f'{Activities.course_id} == {course_id}')
+        filter = literal_column(f'{Activities.__tablename__}.course_id = {course_id}')
         cls.create_join_view(db, f'course_{course_id}_view', selectable, Activities, filter, Activities.start_time.desc())
 
     @classmethod
@@ -378,7 +378,7 @@ class SportActivities(idbutils.DbObject):
     @classmethod
     def google_map_loc(cls, label):
         """Return a literal column composed of a google map URL for either the start or stop location off the activity."""
-        return literal_column(idbutils.Location.google_maps_url_template('activities.%s_lat' % label, 'activities.%s_long' % label) + ' AS %s_loc' % label)
+        return literal_column(f"'http://maps.google.com/?ie=UTF8&q=' || activities.{label}_lat || ',' || activities.{label}_long || '&z=13' AS {label}_loc")
 
 
 class StepsActivities(ActivitiesDb.Base, SportActivities):

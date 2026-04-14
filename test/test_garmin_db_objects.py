@@ -6,12 +6,15 @@ __license__ = "GPL"
 
 import unittest
 import logging
-# from sqlalchemy.exc import LookupError
+
+from sqlalchemy.exc import DataError, StatementError
 
 import fitfile
 
 from garmindb import GarminConnectConfigManager
-from garmindb.garmindb import GarminDb, File, Attributes
+from garmindb.garmindb import GarminDb, File, Attributes, Device
+
+from test_db_base import TestDBBase
 
 
 root_logger = logging.getLogger()
@@ -27,7 +30,14 @@ class TestGarminDbObjects(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.garmin_db = GarminDb(GarminConnectConfigManager().get_db_params(test_db=True))
+        db_params = GarminConnectConfigManager().get_db_params(test_db=True)
+        GarminDb.delete_db(db_params)
+        cls.garmin_db = GarminDb(db_params)
+        Device.insert_or_update(cls.garmin_db, {'serial_number' : 987654321})
+
+    @classmethod
+    def tearDownClass(cls):
+        TestDBBase.dispose_dbs(cls)
 
     def check_file_obj(self, filename_with_path, file_type, file_serial_number):
         (file_id, file_name) = File.name_and_id_from_path(filename_with_path)
@@ -75,7 +85,7 @@ class TestGarminDbObjects(unittest.TestCase):
         filename_with_path = '/test/directory/' + filename
         file_type = 'xxxxx'
         file_serial_number = 987654321
-        with self.assertRaises(LookupError):
+        with self.assertRaises((LookupError, DataError, StatementError)):
             self.check_file_obj(filename_with_path, file_type, file_serial_number)
 
     def test_file_type(self):
