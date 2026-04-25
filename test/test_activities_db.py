@@ -57,7 +57,7 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
             'paddle_activities_table' : PaddleActivities,
             'cycle_activities_table' : CycleActivities,
         }
-        super().setUpClass(cls.garmin_act_db, table_dict, {Activities : [Activities.activity_id]}, ['activity_splits_table', 'paddle_activities_table', 'cycle_activities_table'])
+        super().setUpClass(cls.garmin_act_db, table_dict, {Activities : [Activities.activity_id]}, ['activity_splits_table', 'run_activities_table', 'paddle_activities_table', 'cycle_activities_table'])
         print(f"db params {cls.safe_repr(cls.test_db_params)}")
 
     @classmethod
@@ -74,7 +74,15 @@ class TestActivitiesDb(TestDBBase, unittest.TestCase):
         self.assertGreater(Activities.row_count(self.garmin_act_db), 0)
         self.assertGreater(ActivityLaps.row_count(self.garmin_act_db), 0)
         self.assertGreater(ActivityRecords.row_count(self.garmin_act_db), 0)
-        self.assertGreater(StepsActivities.row_count(self.garmin_act_db), 0)
+        sport_set = {activity.sport for activity in Activities.get_all(self.garmin_act_db)}
+        if sport_set & {'running', 'walking', 'hiking'}:
+            self.assertGreater(StepsActivities.row_count(self.garmin_act_db), 0)
+        if sport_set & {'stand_up_paddleboarding', 'rowing', 'kayaking'}:
+            self.assertGreater(PaddleActivities.row_count(self.garmin_act_db), 0)
+        if sport_set & {'cycling'}:
+            self.assertGreater(CycleActivities.row_count(self.garmin_act_db), 0)
+        if sport_set & {'rock_climbing'}:
+            self.assertGreater(ClimbingActivities.row_count(self.garmin_act_db), 0)
 
     def check_activities_fields(self, fields_list):
         self.check_not_none_cols(self.test_act_db, {Activities : fields_list})
