@@ -24,7 +24,7 @@ What they can do:
 
 Once you have your data in the DB, I recommend using a supplied Jupyter notebooks, third party Jupyter notebooks, and/or SQLite browser like [SQLite Studio](http://sqlitestudio.pl), [HeidiSQL](https://www.heidisql.com/), or [DB Browser for SQLite](https://sqlitebrowser.org/) for browsing and working with the data. The scripts create some default [views](http://www.tutorialspoint.com/sqlite/sqlite_views.htm) in the DBs that make browsing the data easier.
 
-GarminDB can also store data in Postgres. Set `"db": {"type": "postgres", "db_username": "garmindb", "db_password": "garmindb", "db_host": "localhost", "db_port": 5432, "db_name": "garmindb"}` in GarminConnectConfig.json. Postgres support uses one database with one schema per GarminDB logical database. Install the Postgres driver with `pip install 'psycopg[binary]'`.
+GarminDB can also store data in Postgres. Set `"db": {"type": "postgres", "db_username": "garmindb", "db_password": "garmindb", "db_host": "localhost", "db_port": 5432, "db_name": "garmindb"}` in GarminConnectConfig.json. Postgres support uses one database with one schema per GarminDB logical database and sets schema search path at transaction start for compatibility with transaction poolers. Install the Postgres driver with `pip install 'psycopg[binary]'`.
 
 # Using It
 

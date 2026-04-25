@@ -145,8 +145,14 @@ def _set_search_path(dbapi_connection, connection_record, schema):
         cursor.close()
 
 
+def _set_local_search_path(connection, schema):
+    connection.exec_driver_sql(f'SET LOCAL search_path TO {_quote_identifier(schema)}, public')
+
+
 def _install_search_path_event(engine, schema):
     event.listen(engine, 'connect', lambda dbapi_connection, connection_record: _set_search_path(dbapi_connection, connection_record, schema))
+    # Transaction poolers can hand each transaction to a different server connection, so schema must be set at transaction start.
+    event.listen(engine, 'begin', lambda connection: _set_local_search_path(connection, schema))
 
 
 def _install_postgres_functions(connection, schema):
