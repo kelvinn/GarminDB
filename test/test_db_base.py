@@ -28,7 +28,7 @@ class TestDBBase():
         if hasattr(value, '__dict__'):
             values = vars(value).copy()
             for key in values:
-                if 'password' in key or key == 'database_url':
+                if 'password' in key or 'token' in key or key == 'database_url':
                     values[key] = '***'
             return f'<{value.__class__.__name__}() {repr(values)}'
         return repr(value)

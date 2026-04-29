@@ -1,4 +1,6 @@
 sqlalchemy~=2.0.46
+duckdb>=1.5.2
+duckdb-engine>=0.17.0
 python-dateutil
 cached-property
 tqdm
