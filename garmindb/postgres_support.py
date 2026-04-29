@@ -7,6 +7,7 @@ __license__ = "GPL"
 import datetime
 import logging
 import re
+from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, event, extract, func, text
 from sqlalchemy.engine import URL
@@ -24,6 +25,8 @@ from idbutils.db_object import DbViewException
 POSTGRES_DRIVER_MESSAGE = "Postgres support requires the psycopg driver. Install it with: pip install 'psycopg[binary]'"
 _IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 _INSTALLED = False
+_PROFILE_POSTGRES_NATIVE = 'postgres_native'
+_PROFILE_MOTHERDUCK_PGWIRE = 'motherduck_pgwire'
 
 
 class PostgresSupportException(Exception):
@@ -125,6 +128,18 @@ def _postgres_url_from_params(db_params):
     )
 
 
+def _postgres_backend_profile(db_params):
+    host = (getattr(db_params, 'db_host', None) or '').lower()
+    if 'motherduck.com' in host:
+        return _PROFILE_MOTHERDUCK_PGWIRE
+    database_url = getattr(db_params, 'database_url', None)
+    if database_url:
+        parsed = urlparse(database_url)
+        if parsed.hostname and 'motherduck.com' in parsed.hostname.lower():
+            return _PROFILE_MOTHERDUCK_PGWIRE
+    return _PROFILE_POSTGRES_NATIVE
+
+
 def _postgres_url(cls, db_params):
     _ensure_psycopg_driver()
     database_url = getattr(db_params, 'database_url', None)
@@ -137,22 +152,30 @@ def _postgresql_url(cls, db_params):
     return cls._postgres_url(db_params)
 
 
-def _set_search_path(dbapi_connection, connection_record, schema):
+def _set_search_path(dbapi_connection, connection_record, schema, backend_profile):
+    _validate_identifier(schema)
     cursor = dbapi_connection.cursor()
     try:
-        cursor.execute(f'SET search_path TO {_quote_identifier(schema)}, public')
+        if backend_profile == _PROFILE_MOTHERDUCK_PGWIRE:
+            cursor.execute(f"SET search_path = '{schema}, public'")
+        else:
+            cursor.execute(f'SET search_path TO {_quote_identifier(schema)}, public')
     finally:
         cursor.close()
 
 
-def _set_local_search_path(connection, schema):
-    connection.exec_driver_sql(f'SET LOCAL search_path TO {_quote_identifier(schema)}, public')
+def _set_local_search_path(connection, schema, backend_profile):
+    _validate_identifier(schema)
+    if backend_profile == _PROFILE_MOTHERDUCK_PGWIRE:
+        connection.exec_driver_sql(f"SET search_path = '{schema}, public'")
+    else:
+        connection.exec_driver_sql(f'SET LOCAL search_path TO {_quote_identifier(schema)}, public')
 
 
-def _install_search_path_event(engine, schema):
-    event.listen(engine, 'connect', lambda dbapi_connection, connection_record: _set_search_path(dbapi_connection, connection_record, schema))
+def _install_search_path_event(engine, schema, backend_profile):
+    event.listen(engine, 'connect', lambda dbapi_connection, connection_record: _set_search_path(dbapi_connection, connection_record, schema, backend_profile))
     # Transaction poolers can hand each transaction to a different server connection, so schema must be set at transaction start.
-    event.listen(engine, 'begin', lambda connection: _set_local_search_path(connection, schema))
+    event.listen(engine, 'begin', lambda connection: _set_local_search_path(connection, schema, backend_profile))
 
 
 def _install_postgres_functions(connection, schema):
@@ -213,12 +236,15 @@ def _install_postgres_functions(connection, schema):
     """))
 
 
-def _prepare_postgres_engine(engine, schema):
-    _install_search_path_event(engine, schema)
+def _prepare_postgres_engine(engine, schema, backend_profile):
+    _install_search_path_event(engine, schema, backend_profile)
     with engine.begin() as connection:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS {_quote_identifier(schema)}'))
-        connection.execute(text(f'SET search_path TO {_quote_identifier(schema)}, public'))
-        _install_postgres_functions(connection, schema)
+        if backend_profile == _PROFILE_MOTHERDUCK_PGWIRE:
+            connection.execute(text(f"SET search_path = '{schema}, public'"))
+        else:
+            connection.execute(text(f'SET search_path TO {_quote_identifier(schema)}, public'))
+            _install_postgres_functions(connection, schema)
 
 
 def _raise_postgres_driver_exception(exc):
@@ -234,10 +260,11 @@ def _raise_postgres_driver_exception(exc):
 def _postgres_delete(cls, db_params):
     schema = _postgres_schema(cls, db_params)
     _validate_identifier(schema)
+    backend_profile = _postgres_backend_profile(db_params)
     engine = None
     try:
         engine = create_engine(cls._postgres_url(db_params))
-        _prepare_postgres_engine(engine, schema)
+        _prepare_postgres_engine(engine, schema, backend_profile)
         with engine.begin() as connection:
             rows = connection.execute(
                 text("SELECT table_name FROM information_schema.views WHERE table_schema = :schema"),
@@ -302,12 +329,16 @@ def install():
         idb_db.logger.setLevel(logging.DEBUG if debug_level > 0 else logging.INFO)
         self.db_params = db_params
         schema = _postgres_schema(self.__class__, db_params)
+        backend_profile = _postgres_backend_profile(db_params)
+        logger = logging.getLogger(__name__)
+        logger.debug("Postgres backend profile resolved for %s schema %s: %s", self.__class__.__name__, schema, backend_profile)
         _validate_identifier(schema)
         self.schema_name = schema
         try:
             url_func = getattr(self, f'_{db_params.db_type}_url')
             self.engine = create_engine(url_func(self.db_params), echo=(debug_level > 1))
-            _prepare_postgres_engine(self.engine, schema)
+            logger.debug("Preparing engine with backend profile %s", backend_profile)
+            _prepare_postgres_engine(self.engine, schema, backend_profile)
             self.Base.metadata.create_all(self.engine)
             self.attributes = self._DbAttributes()
             self.attributes.version_check(self, self.db_version)
