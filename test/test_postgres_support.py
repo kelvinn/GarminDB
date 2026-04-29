@@ -113,11 +113,11 @@ class TestPostgresSupport(unittest.TestCase):
 
         dbapi_connection = _FakeDbapiConnection()
         calls['connect'](dbapi_connection, None)
-        self.assertEqual(dbapi_connection.cursor_value.commands, ["SET search_path = 'garmin, public'"])
+        self.assertEqual(dbapi_connection.cursor_value.commands, ["SET search_path = 'garmin,public'"])
 
         connection = _FakeSqlAlchemyConnection()
         calls['begin'](connection)
-        self.assertEqual(connection.commands, ["SET search_path = 'garmin, public'"])
+        self.assertEqual(connection.commands, ["SET search_path = 'garmin,public'"])
 
     def test_set_local_search_path_uses_local_setting_postgres_native(self):
         connection = _FakeSqlAlchemyConnection()
@@ -127,7 +127,7 @@ class TestPostgresSupport(unittest.TestCase):
     def test_set_local_search_path_uses_set_for_motherduck(self):
         connection = _FakeSqlAlchemyConnection()
         postgres_support._set_local_search_path(connection, 'monitoring', 'motherduck_pgwire')
-        self.assertEqual(connection.commands, ["SET search_path = 'monitoring, public'"])
+        self.assertEqual(connection.commands, ["SET search_path = 'monitoring,public'"])
 
     def test_set_search_path_closes_cursor_postgres_native(self):
         dbapi_connection = _FakeDbapiConnection()
@@ -138,7 +138,7 @@ class TestPostgresSupport(unittest.TestCase):
     def test_set_search_path_closes_cursor_motherduck(self):
         dbapi_connection = _FakeDbapiConnection()
         postgres_support._set_search_path(dbapi_connection, None, 'activities', 'motherduck_pgwire')
-        self.assertEqual(dbapi_connection.cursor_value.commands, ["SET search_path = 'activities, public'"])
+        self.assertEqual(dbapi_connection.cursor_value.commands, ["SET search_path = 'activities,public'"])
         self.assertTrue(dbapi_connection.cursor_value.closed)
 
     def test_set_local_search_path_validates_schema_identifier(self):
@@ -166,7 +166,7 @@ class TestPostgresSupport(unittest.TestCase):
         search_path_mock.assert_called_once_with(engine, 'garmin', 'motherduck_pgwire')
         install_functions_mock.assert_not_called()
         self.assertIn('CREATE SCHEMA IF NOT EXISTS "garmin"', connection.executed[0])
-        self.assertIn("SET search_path = 'garmin, public'", connection.executed[1])
+        self.assertIn("SET search_path = 'garmin,public'", connection.executed[1])
 
 
 if __name__ == '__main__':

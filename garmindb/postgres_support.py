@@ -157,7 +157,7 @@ def _set_search_path(dbapi_connection, connection_record, schema, backend_profil
     cursor = dbapi_connection.cursor()
     try:
         if backend_profile == _PROFILE_MOTHERDUCK_PGWIRE:
-            cursor.execute(f"SET search_path = '{schema}, public'")
+            cursor.execute(f"SET search_path = '{schema},public'")
         else:
             cursor.execute(f'SET search_path TO {_quote_identifier(schema)}, public')
     finally:
@@ -167,7 +167,7 @@ def _set_search_path(dbapi_connection, connection_record, schema, backend_profil
 def _set_local_search_path(connection, schema, backend_profile):
     _validate_identifier(schema)
     if backend_profile == _PROFILE_MOTHERDUCK_PGWIRE:
-        connection.exec_driver_sql(f"SET search_path = '{schema}, public'")
+        connection.exec_driver_sql(f"SET search_path = '{schema},public'")
     else:
         connection.exec_driver_sql(f'SET LOCAL search_path TO {_quote_identifier(schema)}, public')
 
@@ -241,7 +241,7 @@ def _prepare_postgres_engine(engine, schema, backend_profile):
     with engine.begin() as connection:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS {_quote_identifier(schema)}'))
         if backend_profile == _PROFILE_MOTHERDUCK_PGWIRE:
-            connection.execute(text(f"SET search_path = '{schema}, public'"))
+            connection.execute(text(f"SET search_path = '{schema},public'"))
         else:
             connection.execute(text(f'SET search_path TO {_quote_identifier(schema)}, public'))
             _install_postgres_functions(connection, schema)
