@@ -268,8 +268,14 @@ class GarminDbMain():
 
     def backup_dbs(self):
         """Backup GarminDb database files."""
-        if self.gc_config.get_db_params().db_type == 'postgres':
+        db_type = self.gc_config.get_db_params().db_type
+        if db_type == 'postgres':
             message = 'Postgres backup is not supported by GarminDB; use pg_dump with the configured Postgres connection.'
+            logger.warning(message)
+            print(message)
+            return
+        if db_type == 'motherduck':
+            message = 'MotherDuck backup is not supported by GarminDB; use MotherDuck or DuckDB export tools for the configured database.'
             logger.warning(message)
             print(message)
             return

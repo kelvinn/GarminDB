@@ -48,10 +48,14 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(monitoring_dir, expected_monitoring_dir, f'actual {monitoring_dir} expected {expected_monitoring_dir}')
 
     def test_db(self):
-        db_params = self.gc_config.get_db_params()
         expect_db_type = (self.gc_config.get_db_type() or 'sqlite').lower()
         if expect_db_type == 'postgresql':
             expect_db_type = 'postgres'
+        if expect_db_type == 'postgres' and self.gc_config.get_db_host() and 'motherduck.com' in self.gc_config.get_db_host().lower():
+            with self.assertRaises(ConfigException):
+                self.gc_config.get_db_params()
+            return
+        db_params = self.gc_config.get_db_params()
         self.assertEqual(db_params.db_type, expect_db_type, f"expected {expect_db_type} actual {db_params.db_type}")
         if db_params.db_type == 'sqlite':
             expected_db_path = self.homedir + os.sep + 'HealthData' + os.sep + 'DBs'
@@ -153,6 +157,60 @@ class TestConfig(unittest.TestCase):
         with temp_dir:
             with self.assertRaises(ConfigException):
                 gc_config.get_db_params()
+
+    def test_postgres_rejects_motherduck_host(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'postgres',
+            'db_host' : 'api.motherduck.com',
+            'db_name' : 'health'
+        })
+        with temp_dir:
+            with self.assertRaises(ConfigException):
+                gc_config.get_db_params()
+
+    def test_motherduck_db_params_from_config_fields(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'motherduck',
+            'db_name' : 'health',
+            'motherduck_token' : 'secret'
+        })
+        with temp_dir:
+            db_params = gc_config.get_db_params()
+            self.assertEqual(db_params.db_type, 'motherduck')
+            self.assertEqual(db_params.db_name, 'health')
+            self.assertEqual(db_params.motherduck_token, 'secret')
+
+    def test_motherduck_db_params_from_env_token(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'motherduck',
+            'db_name' : 'health'
+        })
+        with temp_dir:
+            with patch.dict(os.environ, {'MOTHERDUCK_TOKEN' : 'env-secret'}):
+                db_params = gc_config.get_db_params()
+            self.assertEqual(db_params.db_type, 'motherduck')
+            self.assertEqual(db_params.db_name, 'health')
+            self.assertEqual(db_params.motherduck_token, 'env-secret')
+
+    def test_motherduck_requires_db_name(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'motherduck',
+            'motherduck_token' : 'secret'
+        })
+        with temp_dir:
+            with self.assertRaises(ConfigException):
+                gc_config.get_db_params()
+
+    def test_motherduck_requires_token(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'motherduck',
+            'db_name' : 'health'
+        })
+        with temp_dir:
+            with patch.dict(os.environ, {'MOTHERDUCK_TOKEN' : ''}), \
+                    patch.object(GarminConnectConfigManager, '_GarminConnectConfigManager__motherduck_token_from_env_files', return_value=None):
+                with self.assertRaises(ConfigException):
+                    gc_config.get_db_params()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

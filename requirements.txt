@@ -1,4 +1,6 @@
 SQLAlchemy==2.0.46
+duckdb==1.5.2
+duckdb-engine==0.17.0
 python-dateutil==2.9.0.post0
 cached-property==2.0.1
 tqdm==4.67.1
