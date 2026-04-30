@@ -9,6 +9,7 @@ import sys
 import traceback
 
 import fitfile
+from sqlalchemy.orm import sessionmaker
 
 from .garmindb import GarminDb, File, Device, DeviceInfo, Stress, Attributes
 
@@ -20,6 +21,8 @@ root_logger = logging.getLogger()
 
 class FitFileProcessor():
     """Class that takes a parsed FIT file object and imports it into a database."""
+
+    CLOSED_TRANSACTION_ERROR_TEXT = "Can't operate on closed transaction inside context manager"
 
     def __init__(self, db_params, plugin_manager=None, debug=0):
         """
@@ -34,6 +37,7 @@ class FitFileProcessor():
         self.db_params = db_params
         self.debug = debug
         self.garmin_db = GarminDb(db_params, debug - 1)
+        self._closed_transaction_error_counts = {}
 
     def _plugin_dispatch(self, plugins, handler_name, *args, **kwargs):
         result = {}
@@ -43,6 +47,58 @@ class FitFileProcessor():
                 result.update(function(*args, **kwargs))
         return result
 
+    def _active_sessions(self):
+        session_attributes = ('garmin_db_session', 'garmin_mon_db_session', 'garmin_act_db_session')
+        return [getattr(self, name, None) for name in session_attributes if getattr(self, name, None) is not None]
+
+    def _commit_active_sessions(self):
+        for session in self._active_sessions():
+            session.commit()
+
+    def _rollback_active_sessions(self):
+        for session in self._active_sessions():
+            try:
+                session.rollback()
+            except Exception:
+                logger.debug("Rollback failed on session %r", session, exc_info=True)
+
+    def _close_active_sessions(self):
+        for session in self._active_sessions():
+            try:
+                session.close()
+            except Exception:
+                logger.debug("Close failed on session %r", session, exc_info=True)
+
+    def _session_for_db(self, db):
+        return sessionmaker(db.engine, expire_on_commit=False)()
+
+    def _is_motherduck_mode(self):
+        return getattr(self.db_params, 'db_type', None) == 'motherduck'
+
+    def _is_closed_transaction_error(self, error):
+        return self.CLOSED_TRANSACTION_ERROR_TEXT in str(error)
+
+    def _record_write_failure(self, fit_file, message_type, message, error):
+        key = (fit_file.filename, getattr(message_type, 'name', repr(message_type)))
+        if self._is_closed_transaction_error(error):
+            count = self._closed_transaction_error_counts.get(key, 0) + 1
+            self._closed_transaction_error_counts[key] = count
+            if count > 1:
+                return
+        logger.error("Failed to write message %r type %r: %s", message_type, message, error)
+        root_logger.error("Failed to write message %r type %r: %s", message_type, message, traceback.format_exc())
+
+    def _flush_closed_transaction_error_summary(self):
+        for (filename, message_type), count in self._closed_transaction_error_counts.items():
+            if count > 1:
+                root_logger.warning(
+                    "Suppressed %d repeated closed transaction errors for %r in %s",
+                    count - 1,
+                    message_type,
+                    filename
+                )
+        self._closed_transaction_error_counts = {}
+
     def __write_generic(self, fit_file, message_type, messages):
         """Write all messages of a given message type to the database."""
         handler_name = '_write_' + message_type.name + '_entry'
@@ -51,9 +107,12 @@ class FitFileProcessor():
             for message in messages:
                 try:
                     function(fit_file, message.fields)
+                    if self._is_motherduck_mode():
+                        self._commit_active_sessions()
                 except Exception as e:
-                    logger.error("Failed to write message %r type %r: %s", message_type, message, e)
-                    root_logger.error("Failed to write message %r type %r: %s", message_type, message, traceback.format_exc())
+                    if self._is_motherduck_mode():
+                        self._rollback_active_sessions()
+                    self._record_write_failure(fit_file, message_type, message, e)
         elif isinstance(message_type, fitfile.UnknownMessageType) or message_type.is_unknown():
             root_logger.debug("No entry handler %s for message type %r (%d) from %s: %s",
                               handler_name, message_type, len(messages), fit_file.filename, messages[0])
@@ -73,6 +132,9 @@ class FitFileProcessor():
         messages = fit_file[message_type]
         function = getattr(self, '_write_' + message_type.name, self.__write_generic)
         function(fit_file, message_type, messages)
+        is_generic = getattr(function, '__func__', None) is getattr(self.__write_generic, '__func__', None)
+        if self._is_motherduck_mode() and not is_generic:
+            self._commit_active_sessions()
         root_logger.debug("Processed %d %r entries for %s", len(messages), message_type, fit_file.filename)
 
     def _write_message_types(self, fit_file, message_types):
@@ -92,8 +154,17 @@ class FitFileProcessor():
 
     def write_file(self, fit_file):
         """Write all data from the FIT file to database files."""
-        with self.garmin_db.managed_session() as self.garmin_db_session:
+        self.garmin_db_session = self._session_for_db(self.garmin_db)
+        try:
             self._write_message_types(fit_file, fit_file.message_types)
+            self._commit_active_sessions()
+        except Exception:
+            self._rollback_active_sessions()
+            raise
+        finally:
+            self._flush_closed_transaction_error_summary()
+            self._close_active_sessions()
+            self.garmin_db_session = None
 
     #
     # Message type handlers

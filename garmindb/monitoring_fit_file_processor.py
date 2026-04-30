@@ -33,8 +33,19 @@ class MonitoringFitFileProcessor(FitFileProcessor):
             root_logger.info("Loaded %d activity plugins %r for file %s", len(self.activity_fit_file_plugins), self.activity_fit_file_plugins, fit_file)
         # Create the db after setting up the plugins so that plugin tables are handled properly
         self.garmin_mon_db = MonitoringDb(self.db_params, self.debug - 1)
-        with self.garmin_db.managed_session() as self.garmin_db_session, self.garmin_mon_db.managed_session() as self.garmin_mon_db_session:
+        self.garmin_db_session = self._session_for_db(self.garmin_db)
+        self.garmin_mon_db_session = self._session_for_db(self.garmin_mon_db)
+        try:
             self._write_message_types(fit_file, fit_file.message_types)
+            self._commit_active_sessions()
+        except Exception:
+            self._rollback_active_sessions()
+            raise
+        finally:
+            self._flush_closed_transaction_error_summary()
+            self._close_active_sessions()
+            self.garmin_db_session = None
+            self.garmin_mon_db_session = None
 
     def _plugin_dispatch(self, handler_name, *args, **kwargs):
         return super()._plugin_dispatch(self.monitoring_fit_file_plugins, handler_name, *args, **kwargs)

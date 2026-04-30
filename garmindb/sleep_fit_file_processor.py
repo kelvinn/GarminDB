@@ -25,8 +25,17 @@ class SleepFitFileProcessor(FitFileProcessor):
         """Given a Fit File object, write all of its messages to the DB."""
         self.last_sleep_event = None
         self.last_sleep_level = None
-        with self.garmin_db.managed_session() as self.garmin_db_session:
+        self.garmin_db_session = self._session_for_db(self.garmin_db)
+        try:
             self._write_message_types(fit_file, fit_file.message_types)
+            self._commit_active_sessions()
+        except Exception:
+            self._rollback_active_sessions()
+            raise
+        finally:
+            self._flush_closed_transaction_error_summary()
+            self._close_active_sessions()
+            self.garmin_db_session = None
 
     def _write_sleep_level_entry(self, fit_file, message_fields):
         logger.debug("sleep level message: %r", message_fields)
