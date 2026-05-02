@@ -8,6 +8,7 @@ import datetime
 import logging
 import types
 import unittest
+from collections import defaultdict
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -32,6 +33,18 @@ class _FakeSession:
 
     def close(self):
         self.events.append('close')
+
+
+class _FakePostgresSession:
+
+    def __init__(self):
+        self.statements = []
+
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name='postgresql'))
+
+    def execute(self, statement):
+        self.statements.append(statement)
 
 
 class _FakeMessage:
@@ -143,6 +156,24 @@ class TestFitFileProcessorTransactions(unittest.TestCase):
 
         self.assertEqual(insert_mock.call_count, 3)
         self.assertEqual(processor.garmin_mon_db_session.events, [])
+
+    def test_postgres_monitoring_writes_use_bulk_conflict_upsert(self):
+        processor = self._monitoring_processor()
+        processor._bulk_upsert_entries = defaultdict(list)
+        session = _FakePostgresSession()
+        rows = [
+            {'timestamp': datetime.datetime(2022, 3, 18, 19, 30), 'pulse_ox': 93.0},
+            {'timestamp': datetime.datetime(2022, 3, 18, 19, 31), 'pulse_ox': 94.0},
+        ]
+
+        with patch.object(MonitoringPulseOx, 's_insert_or_update') as insert_mock:
+            for row in rows:
+                processor._insert_or_update(MonitoringPulseOx, session, row)
+            processor._flush_bulk_upserts()
+
+        self.assertFalse(insert_mock.called)
+        self.assertEqual(len(session.statements), 1)
+        self.assertIn('ON CONFLICT', str(session.statements[0]))
 
 
 if __name__ == '__main__':
