@@ -124,17 +124,6 @@ class GarminConnectConfigManager(JsonConfig):
         """Return the configured database URL from config, environment, or .env."""
         return self.get_db_database_url() or os.environ.get('DATABASE_URL') or self.__database_url_from_env_files()
 
-    def __motherduck_token_from_env_files(self):
-        for env_file in (self.config_dir + os.sep + '.env', os.getcwd() + os.sep + '.env'):
-            token = self.__env_value_from_file(env_file, 'MOTHERDUCK_TOKEN')
-            if token:
-                return token
-        return None
-
-    def get_motherduck_token(self):
-        """Return the configured MotherDuck token from config, environment, or .env."""
-        return self.get_node_value('db', 'motherduck_token') or os.environ.get('MOTHERDUCK_TOKEN') or self.__motherduck_token_from_env_files()
-
     @staticmethod
     def __db_port(port):
         if port in (None, ''):
@@ -159,17 +148,6 @@ class GarminConnectConfigManager(JsonConfig):
             'db_port' : parsed.port,
             'db_name' : unquote(db_name) if db_name else None
         }
-
-    @staticmethod
-    def __is_motherduck_host(host):
-        return host is not None and 'motherduck.com' in host.lower()
-
-    @staticmethod
-    def __is_motherduck_database_url(database_url):
-        if not database_url:
-            return False
-        parsed = urlparse(database_url)
-        return GarminConnectConfigManager.__is_motherduck_host(parsed.hostname)
 
     def __configured_db_params(self):
         return {
@@ -204,21 +182,10 @@ class GarminConnectConfigManager(JsonConfig):
             db_params.update(self.__configured_db_params())
         elif db_type == 'postgres':
             configured_params = self.__configured_db_params()
-            if self.__is_motherduck_host(configured_params.get('db_host')) or self.__is_motherduck_database_url(self.get_database_url()):
-                raise ConfigException('MotherDuck must use db.type "motherduck"; the Postgres interface is not supported for MotherDuck.')
             legacy_params = self.__postgres_db_params_from_url(self.get_database_url())
             db_params.update(self.__merge_db_params(configured_params, legacy_params))
             if not db_params.get('db_name'):
                 raise ConfigException('Postgres db type requires db.db_name, or a legacy database_url/DATABASE_URL containing a database name.')
-        elif db_type == 'motherduck':
-            db_params.update({
-                'db_name' : self.get_db_name(),
-                'motherduck_token' : self.get_motherduck_token()
-            })
-            if not db_params.get('db_name'):
-                raise ConfigException('MotherDuck db type requires db.db_name.')
-            if not db_params.get('motherduck_token'):
-                raise ConfigException('MotherDuck db type requires db.motherduck_token or MOTHERDUCK_TOKEN.')
         return DbParams(**db_params)
 
     def get_base_dir(self, test_dir=False):

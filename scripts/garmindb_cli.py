@@ -274,11 +274,6 @@ class GarminDbMain():
             logger.warning(message)
             print(message)
             return
-        if db_type == 'motherduck':
-            message = 'MotherDuck backup is not supported by GarminDB; use MotherDuck or DuckDB export tools for the configured database.'
-            logger.warning(message)
-            print(message)
-            return
         dbs = glob.glob(self.gc_config.get_db_dir() + os.sep + '*.db')
         backupfile = self.gc_config.get_backup_dir()  + os.sep + str(int(datetime.datetime.now().timestamp())) + '_dbs.zip'
         logger.info("Backiping up dbs %s to %s", dbs, backupfile)

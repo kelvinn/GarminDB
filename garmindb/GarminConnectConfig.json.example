@@ -5,8 +5,7 @@
         "db_password"                   : null,
         "db_host"                       : "localhost",
         "db_port"                       : 5432,
-        "db_name"                       : "garmindb",
-        "motherduck_token"              : null
+        "db_name"                       : "garmindb"
     },
     "garmin": {
         "domain"                        : "garmin.com"

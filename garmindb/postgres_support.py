@@ -7,7 +7,6 @@ __license__ = "GPL"
 import datetime
 import logging
 import re
-from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, event, extract, func, text
 from sqlalchemy.engine import URL
@@ -128,14 +127,6 @@ def _postgres_url_from_params(db_params):
 
 
 def _postgres_backend_profile(db_params):
-    host = (getattr(db_params, 'db_host', None) or '').lower()
-    if 'motherduck.com' in host:
-        raise PostgresSupportException('MotherDuck must use db.type "motherduck"; the Postgres interface is not supported for MotherDuck.')
-    database_url = getattr(db_params, 'database_url', None)
-    if database_url:
-        parsed = urlparse(database_url)
-        if parsed.hostname and 'motherduck.com' in parsed.hostname.lower():
-            raise PostgresSupportException('MotherDuck must use db.type "motherduck"; the Postgres interface is not supported for MotherDuck.')
     return _PROFILE_POSTGRES_NATIVE
 
 

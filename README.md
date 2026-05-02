@@ -26,8 +26,6 @@ Once you have your data in the DB, I recommend using a supplied Jupyter notebook
 
 GarminDB can also store data in Postgres. Set `"db": {"type": "postgres", "db_username": "garmindb", "db_password": "garmindb", "db_host": "localhost", "db_port": 5432, "db_name": "garmindb"}` in GarminConnectConfig.json. Postgres support uses one database with one schema per GarminDB logical database and sets schema search path at transaction start for compatibility with transaction poolers. Install the Postgres driver with `pip install 'psycopg[binary]'`.
 
-GarminDB can store Garmin workflow data directly in MotherDuck through DuckDB, without using the Postgres interface. Set `"db": {"type": "motherduck", "db_name": "health", "motherduck_token": "<token>"}` in GarminConnectConfig.json, or omit `motherduck_token` and set `MOTHERDUCK_TOKEN` in the environment or `.env`. GarminDB uses the single configured MotherDuck database and creates separate schemas for the Garmin logical databases: `garmin`, `garmin_monitoring`, `garmin_activities`, `garmin_summary`, and `summary`. Install the direct MotherDuck dependencies with `pip install duckdb duckdb-engine`.
-
 # Using It
 
 ## Releases

@@ -80,11 +80,6 @@ class TestPostgresSupport(unittest.TestCase):
         profile = postgres_support._postgres_backend_profile(db_params)
         self.assertEqual(profile, 'postgres_native')
 
-    def test_postgres_backend_profile_detects_motherduck(self):
-        db_params = SimpleNamespace(db_host='api.MOTHERDUCK.com')
-        with self.assertRaises(postgres_support.PostgresSupportException):
-            postgres_support._postgres_backend_profile(db_params)
-
     def test_install_search_path_event_registers_connect_and_begin_postgres_native(self):
         engine = object()
         with patch.object(postgres_support.event, 'listen') as listen_mock:
