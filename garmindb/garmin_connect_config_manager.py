@@ -133,6 +133,57 @@ class GarminConnectConfigManager(JsonConfig):
         except ValueError as e:
             raise ConfigException(f'Invalid db.db_port value: {port}') from e
 
+    def __db_config_value(self, key_name, default):
+        return self.get_node_value('db', key_name) if self.get_node_value('db', key_name) is not None else default
+
+    @staticmethod
+    def __positive_int(value, key_name):
+        try:
+            int_value = int(value)
+        except (TypeError, ValueError) as e:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}') from e
+        if int_value <= 0:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be > 0.')
+        return int_value
+
+    @staticmethod
+    def __non_negative_int(value, key_name):
+        try:
+            int_value = int(value)
+        except (TypeError, ValueError) as e:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}') from e
+        if int_value < 0:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be >= 0.')
+        return int_value
+
+    @staticmethod
+    def __positive_float(value, key_name):
+        try:
+            float_value = float(value)
+        except (TypeError, ValueError) as e:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}') from e
+        if float_value <= 0:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be > 0.')
+        return float_value
+
+    def __postgres_runtime_params(self):
+        connect_timeout = self.__positive_int(self.__db_config_value('postgres_connect_timeout_sec', 10), 'postgres_connect_timeout_sec')
+        statement_timeout = self.__non_negative_int(self.__db_config_value('postgres_statement_timeout_ms', 0), 'postgres_statement_timeout_ms')
+        retry_attempts = self.__positive_int(self.__db_config_value('postgres_retry_attempts', 3), 'postgres_retry_attempts')
+        retry_base_backoff = self.__positive_float(self.__db_config_value('postgres_retry_base_backoff_sec', 0.5), 'postgres_retry_base_backoff_sec')
+        retry_max_backoff = self.__positive_float(self.__db_config_value('postgres_retry_max_backoff_sec', 4.0), 'postgres_retry_max_backoff_sec')
+        if retry_max_backoff < retry_base_backoff:
+            raise ConfigException(
+                f'Invalid db.postgres_retry_max_backoff_sec value: {retry_max_backoff}. Must be >= db.postgres_retry_base_backoff_sec ({retry_base_backoff}).'
+            )
+        return {
+            'postgres_connect_timeout_sec' : connect_timeout,
+            'postgres_statement_timeout_ms' : statement_timeout,
+            'postgres_retry_attempts' : retry_attempts,
+            'postgres_retry_base_backoff_sec' : retry_base_backoff,
+            'postgres_retry_max_backoff_sec' : retry_max_backoff
+        }
+
     @staticmethod
     def __postgres_db_params_from_url(database_url):
         if not database_url:
@@ -186,6 +237,7 @@ class GarminConnectConfigManager(JsonConfig):
             db_params.update(self.__merge_db_params(configured_params, legacy_params))
             if not db_params.get('db_name'):
                 raise ConfigException('Postgres db type requires db.db_name, or a legacy database_url/DATABASE_URL containing a database name.')
+            db_params.update(self.__postgres_runtime_params())
         return DbParams(**db_params)
 
     def get_base_dir(self, test_dir=False):
