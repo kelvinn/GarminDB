@@ -22,7 +22,8 @@ root_logger = logging.getLogger()
 class FitData():
     """Class for importing FIT files into a database."""
 
-    def __init__(self, input_dir, debug, latest=False, recursive=False, fit_types=None, measurement_system=fitfile.field_enums.DisplayMeasure.metric):
+    def __init__(self, input_dir, debug, latest=False, recursive=False, fit_types=None, measurement_system=fitfile.field_enums.DisplayMeasure.metric,
+                 file_filter=None):
         """
         Return an instance of FitData.
 
@@ -39,6 +40,8 @@ class FitData():
         self.debug = debug
         self.fit_types = fit_types
         self.file_names = FileProcessor.dir_to_files(input_dir, fitfile.file.name_regex, latest, recursive)
+        if file_filter is not None:
+            self.file_names = [file_name for file_name in self.file_names if file_filter(file_name)]
 
     def file_count(self):
         """Return the number of files that will be processed."""
@@ -46,6 +49,7 @@ class FitData():
 
     def process_files(self, fit_file_processor):
         """Import FIT files into the database."""
+        skipped = 0
         for file_name in tqdm(self.file_names, unit='files'):
             try:
                 fit_file = fitfile.file.File(file_name, self.measurement_system)
@@ -53,7 +57,10 @@ class FitData():
                     fit_file_processor.write_file(fit_file)
                     root_logger.debug("Wrote %s to the database", fit_file)
                 else:
-                    root_logger.info("skipping non-matching %s", fit_file)
+                    skipped += 1
+                    root_logger.debug("skipping non-matching %s", fit_file)
             except Exception as e:
                 logger.error("Failed to parse %s: %s", file_name, e)
                 root_logger.error("Failed to parse %s: %s - %s", file_name, e, traceback.format_exc())
+        if skipped:
+            root_logger.info("Skipped %d non-matching FIT files", skipped)
