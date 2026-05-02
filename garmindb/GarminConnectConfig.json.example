@@ -5,7 +5,12 @@
         "db_password"                   : null,
         "db_host"                       : "localhost",
         "db_port"                       : 5432,
-        "db_name"                       : "garmindb"
+        "db_name"                       : "garmindb",
+        "postgres_connect_timeout_sec"  : 10,
+        "postgres_statement_timeout_ms" : 0,
+        "postgres_retry_attempts"       : 3,
+        "postgres_retry_base_backoff_sec": 0.5,
+        "postgres_retry_max_backoff_sec": 4.0
     },
     "garmin": {
         "domain"                        : "garmin.com"

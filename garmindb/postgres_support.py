@@ -130,6 +130,25 @@ def _postgres_backend_profile(db_params):
     return _PROFILE_POSTGRES_NATIVE
 
 
+def _postgres_connect_args(db_params):
+    connect_args = {
+        'connect_timeout': int(getattr(db_params, 'postgres_connect_timeout_sec', 10))
+    }
+    statement_timeout = int(getattr(db_params, 'postgres_statement_timeout_ms', 0))
+    if statement_timeout > 0:
+        connect_args['options'] = f'-c statement_timeout={statement_timeout}'
+    return connect_args
+
+
+def _create_postgres_engine(url, db_params, echo=False):
+    return create_engine(
+        url,
+        echo=echo,
+        pool_pre_ping=True,
+        connect_args=_postgres_connect_args(db_params)
+    )
+
+
 def _postgres_url(cls, db_params):
     _ensure_psycopg_driver()
     database_url = getattr(db_params, 'database_url', None)
@@ -244,7 +263,7 @@ def _postgres_delete(cls, db_params):
     backend_profile = _postgres_backend_profile(db_params)
     engine = None
     try:
-        engine = create_engine(cls._postgres_url(db_params))
+        engine = _create_postgres_engine(cls._postgres_url(db_params), db_params)
         _prepare_postgres_engine(engine, schema, backend_profile)
         with engine.begin() as connection:
             rows = connection.execute(
@@ -318,7 +337,7 @@ def install():
         self.schema_name = schema
         try:
             url_func = getattr(self, f'_{db_params.db_type}_url')
-            self.engine = create_engine(url_func(self.db_params), echo=(debug_level > 1))
+            self.engine = _create_postgres_engine(url_func(self.db_params), self.db_params, echo=(debug_level > 1))
             logger.debug("Preparing engine with backend profile %s", backend_profile)
             _prepare_postgres_engine(self.engine, schema, backend_profile)
             self.Base.metadata.create_all(self.engine)

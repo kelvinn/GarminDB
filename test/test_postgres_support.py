@@ -97,6 +97,28 @@ class TestPostgresSupport(unittest.TestCase):
         profile = postgres_support._postgres_backend_profile(db_params)
         self.assertEqual(profile, 'postgres_native')
 
+    def test_postgres_connect_args_uses_defaults(self):
+        db_params = SimpleNamespace()
+        connect_args = postgres_support._postgres_connect_args(db_params)
+        self.assertEqual(connect_args, {'connect_timeout': 10})
+
+    def test_postgres_connect_args_includes_statement_timeout_when_configured(self):
+        db_params = SimpleNamespace(postgres_connect_timeout_sec=25, postgres_statement_timeout_ms=30000)
+        connect_args = postgres_support._postgres_connect_args(db_params)
+        self.assertEqual(connect_args, {'connect_timeout': 25, 'options': '-c statement_timeout=30000'})
+
+    def test_create_postgres_engine_uses_pre_ping_and_connect_args(self):
+        db_params = SimpleNamespace(postgres_connect_timeout_sec=9, postgres_statement_timeout_ms=0)
+        with patch.object(postgres_support, 'create_engine', return_value='engine') as create_engine_mock:
+            engine = postgres_support._create_postgres_engine('postgresql+psycopg://db', db_params, echo=True)
+        self.assertEqual(engine, 'engine')
+        create_engine_mock.assert_called_once_with(
+            'postgresql+psycopg://db',
+            echo=True,
+            pool_pre_ping=True,
+            connect_args={'connect_timeout': 9}
+        )
+
     def test_install_search_path_event_registers_connect_and_begin_postgres_native(self):
         engine = object()
         with patch.object(postgres_support.event, 'listen') as listen_mock:

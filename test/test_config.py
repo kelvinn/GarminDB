@@ -116,6 +116,37 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(db_params.db_name, 'garmindb')
             self.assertFalse(hasattr(db_params, 'database_url'))
 
+    def test_postgres_runtime_defaults(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'postgres',
+            'db_name' : 'garmindb'
+        })
+        with temp_dir:
+            db_params = gc_config.get_db_params()
+            self.assertEqual(db_params.postgres_connect_timeout_sec, 10)
+            self.assertEqual(db_params.postgres_statement_timeout_ms, 0)
+            self.assertEqual(db_params.postgres_retry_attempts, 3)
+            self.assertEqual(db_params.postgres_retry_base_backoff_sec, 0.5)
+            self.assertEqual(db_params.postgres_retry_max_backoff_sec, 4.0)
+
+    def test_postgres_runtime_overrides(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'postgres',
+            'db_name' : 'garmindb',
+            'postgres_connect_timeout_sec' : '15',
+            'postgres_statement_timeout_ms' : '25000',
+            'postgres_retry_attempts' : '5',
+            'postgres_retry_base_backoff_sec' : '0.75',
+            'postgres_retry_max_backoff_sec' : '8.5'
+        })
+        with temp_dir:
+            db_params = gc_config.get_db_params()
+            self.assertEqual(db_params.postgres_connect_timeout_sec, 15)
+            self.assertEqual(db_params.postgres_statement_timeout_ms, 25000)
+            self.assertEqual(db_params.postgres_retry_attempts, 5)
+            self.assertEqual(db_params.postgres_retry_base_backoff_sec, 0.75)
+            self.assertEqual(db_params.postgres_retry_max_backoff_sec, 8.5)
+
     def test_postgres_config_fields_override_legacy_database_url(self):
         temp_dir, gc_config = self.config_for_db({
             'type' : 'postgres',
@@ -149,6 +180,31 @@ class TestConfig(unittest.TestCase):
         temp_dir, gc_config = self.config_for_db({
             'type' : 'postgres',
             'db_username' : 'garmin'
+        })
+        with temp_dir:
+            with self.assertRaises(ConfigException):
+                gc_config.get_db_params()
+
+    def test_postgres_rejects_invalid_runtime_retry_and_timeout_values(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'postgres',
+            'db_name' : 'garmindb',
+            'postgres_connect_timeout_sec' : 0,
+            'postgres_statement_timeout_ms' : -1,
+            'postgres_retry_attempts' : 0,
+            'postgres_retry_base_backoff_sec' : 0,
+            'postgres_retry_max_backoff_sec' : 'bad',
+        })
+        with temp_dir:
+            with self.assertRaises(ConfigException):
+                gc_config.get_db_params()
+
+    def test_postgres_rejects_retry_max_backoff_less_than_base(self):
+        temp_dir, gc_config = self.config_for_db({
+            'type' : 'postgres',
+            'db_name' : 'garmindb',
+            'postgres_retry_base_backoff_sec' : 2,
+            'postgres_retry_max_backoff_sec' : 1,
         })
         with temp_dir:
             with self.assertRaises(ConfigException):
