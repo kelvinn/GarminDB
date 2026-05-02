@@ -4,10 +4,15 @@ __author__ = "Tom Goetz"
 __copyright__ = "Copyright Tom Goetz"
 __license__ = "GPL"
 
+import datetime
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 
+from sqlalchemy import column
+from sqlalchemy.types import Integer, Time
+
+import idbutils
 from garmindb import postgres_support
 
 
@@ -72,6 +77,18 @@ class _FakePreparedConnection:
         self.executed.append(str(statement))
 
 
+class _FakeLatestTimeTable:
+
+    time_col = column('day')
+    last_call = None
+    return_value = None
+
+    @classmethod
+    def get_col_max_greater_than_value(cls, db, col, match_col, match_value, start_ts=None, end_ts=None):
+        cls.last_call = (db, col, match_col, match_value, start_ts, end_ts)
+        return cls.return_value
+
+
 class TestPostgresSupport(unittest.TestCase):
     """Tests for postgres search_path setup."""
 
@@ -124,6 +141,45 @@ class TestPostgresSupport(unittest.TestCase):
         install_functions_mock.assert_called_once_with(connection, 'garmin')
         self.assertIn('CREATE SCHEMA IF NOT EXISTS "garmin"', connection.executed[0])
         self.assertIn('SET search_path TO "garmin", public', connection.executed[1])
+
+    def test_latest_time_postgres_time_column_uses_time_min_threshold(self):
+        db = SimpleNamespace(db_params=SimpleNamespace(db_type='postgres'))
+        time_column = column('total_sleep', Time())
+        _FakeLatestTimeTable.return_value = datetime.datetime(2026, 1, 1)
+        _FakeLatestTimeTable.last_call = None
+
+        result = idbutils.DbObject.latest_time.__func__(_FakeLatestTimeTable, db, time_column)
+
+        self.assertEqual(result, datetime.datetime(2026, 1, 1))
+        self.assertIsNotNone(_FakeLatestTimeTable.last_call)
+        self.assertIs(_FakeLatestTimeTable.last_call[0], db)
+        self.assertEqual(_FakeLatestTimeTable.last_call[1], _FakeLatestTimeTable.time_col)
+        self.assertEqual(_FakeLatestTimeTable.last_call[2], time_column)
+        self.assertEqual(_FakeLatestTimeTable.last_call[3], datetime.time.min)
+
+    def test_latest_time_postgres_non_time_column_keeps_original_threshold(self):
+        db = SimpleNamespace(db_params=SimpleNamespace(db_type='postgres'))
+        int_column = column('heart_rate', Integer())
+        _FakeLatestTimeTable.return_value = datetime.datetime(2026, 1, 2)
+        _FakeLatestTimeTable.last_call = None
+
+        result = idbutils.DbObject.latest_time.__func__(_FakeLatestTimeTable, db, int_column)
+
+        self.assertEqual(result, datetime.datetime(2026, 1, 2))
+        self.assertIsNotNone(_FakeLatestTimeTable.last_call)
+        self.assertEqual(_FakeLatestTimeTable.last_call[3], 0)
+
+    def test_latest_time_non_postgres_keeps_original_threshold(self):
+        db = SimpleNamespace(db_params=SimpleNamespace(db_type='sqlite'))
+        time_column = column('total_sleep', Time())
+        _FakeLatestTimeTable.return_value = datetime.datetime(2026, 1, 3)
+        _FakeLatestTimeTable.last_call = None
+
+        result = idbutils.DbObject.latest_time.__func__(_FakeLatestTimeTable, db, time_column)
+
+        self.assertEqual(result, datetime.datetime(2026, 1, 3))
+        self.assertIsNotNone(_FakeLatestTimeTable.last_call)
+        self.assertEqual(_FakeLatestTimeTable.last_call[3], 0)
 
 
 if __name__ == '__main__':

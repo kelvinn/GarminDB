@@ -302,6 +302,7 @@ def install():
     original_s_get_months = idbutils.DbObject.s_get_months
     original_s_get_days = idbutils.DbObject.s_get_days
     original_s_get_col_func_of_max_per_day_for_value = idbutils.DbObject._s_get_col_func_of_max_per_day_for_value
+    original_latest_time = idbutils.DbObject.latest_time
 
     def patched_init(self, db_params, debug_level=0):
         if not _is_postgres_params(db_params):
@@ -402,6 +403,13 @@ def install():
             max_daily_query = max_daily_query.filter(match_col == match_value)
         return session.query(stat_func(max_daily_query.subquery().columns.maxes)).scalar()
 
+    def patched_latest_time(cls, db, not_zero_col):
+        if not _is_postgres_db(db):
+            return original_latest_time.__func__(cls, db, not_zero_col)
+        if isinstance(getattr(not_zero_col, 'type', None), Time):
+            return cls.get_col_max_greater_than_value(db, cls.time_col, not_zero_col, datetime.time.min)
+        return original_latest_time.__func__(cls, db, not_zero_col)
+
     idbutils.DB._postgres_url = classmethod(_postgres_url)
     idbutils.DB._postgresql_url = classmethod(_postgresql_url)
     idbutils.DB._postgres_delete = classmethod(_postgres_delete)
@@ -418,6 +426,7 @@ def install():
     idbutils.DbObject.s_get_months = classmethod(patched_s_get_months)
     idbutils.DbObject.s_get_days = classmethod(patched_s_get_days)
     idbutils.DbObject._s_get_col_func_of_max_per_day_for_value = classmethod(patched_s_get_col_func_of_max_per_day_for_value)
+    idbutils.DbObject.latest_time = classmethod(patched_latest_time)
 
     _INSTALLED = True
 
