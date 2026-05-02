@@ -72,9 +72,6 @@ class FitFileProcessor():
     def _session_for_db(self, db):
         return sessionmaker(db.engine, expire_on_commit=False)()
 
-    def _is_motherduck_mode(self):
-        return getattr(self.db_params, 'db_type', None) == 'motherduck'
-
     def _is_closed_transaction_error(self, error):
         return self.CLOSED_TRANSACTION_ERROR_TEXT in str(error)
 
@@ -107,11 +104,7 @@ class FitFileProcessor():
             for message in messages:
                 try:
                     function(fit_file, message.fields)
-                    if self._is_motherduck_mode():
-                        self._commit_active_sessions()
                 except Exception as e:
-                    if self._is_motherduck_mode():
-                        self._rollback_active_sessions()
                     self._record_write_failure(fit_file, message_type, message, e)
         elif isinstance(message_type, fitfile.UnknownMessageType) or message_type.is_unknown():
             root_logger.debug("No entry handler %s for message type %r (%d) from %s: %s",
@@ -132,9 +125,6 @@ class FitFileProcessor():
         messages = fit_file[message_type]
         function = getattr(self, '_write_' + message_type.name, self.__write_generic)
         function(fit_file, message_type, messages)
-        is_generic = getattr(function, '__func__', None) is getattr(self.__write_generic, '__func__', None)
-        if self._is_motherduck_mode() and not is_generic:
-            self._commit_active_sessions()
         root_logger.debug("Processed %d %r entries for %s", len(messages), message_type, fit_file.filename)
 
     def _write_message_types(self, fit_file, message_types):

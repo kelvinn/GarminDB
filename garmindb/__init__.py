@@ -11,7 +11,6 @@ from .version_info import version_string
 __version__ = version_string()
 
 from . import postgres_support
-from . import motherduck_support
 
 from .activity_fit_plugin_base import ActivityFitPluginBase
 from .monitoring_fit_plugin_base import MonitoringFitPluginBase

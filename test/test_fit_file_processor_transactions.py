@@ -64,19 +64,19 @@ class TestFitFileProcessorTransactions(unittest.TestCase):
 
     def _base_processor(self):
         processor = FitFileProcessor.__new__(FitFileProcessor)
-        processor.db_params = SimpleNamespace(db_type='motherduck')
+        processor.db_params = SimpleNamespace(db_type='sqlite')
         processor._closed_transaction_error_counts = {}
         processor.garmin_db_session = _FakeSession()
         return processor
 
     def _monitoring_processor(self):
         processor = MonitoringFitFileProcessor.__new__(MonitoringFitFileProcessor)
-        processor.db_params = SimpleNamespace(db_type='motherduck')
+        processor.db_params = SimpleNamespace(db_type='sqlite')
         processor._closed_transaction_error_counts = {}
         processor.garmin_mon_db_session = _FakeSession()
         return processor
 
-    def test_generic_writer_rolls_back_then_continues(self):
+    def test_generic_writer_logs_failure_then_continues(self):
         processor = self._base_processor()
         processed = []
 
@@ -96,7 +96,7 @@ class TestFitFileProcessorTransactions(unittest.TestCase):
         processor._FitFileProcessor__write_generic(fit_file, message_type, messages)
 
         self.assertEqual(processed, [1, 2])
-        self.assertEqual(processor.garmin_db_session.events, ['rollback', 'commit'])
+        self.assertEqual(processor.garmin_db_session.events, [])
 
     def test_closed_transaction_errors_are_deduplicated(self):
         processor = self._base_processor()
@@ -142,7 +142,7 @@ class TestFitFileProcessorTransactions(unittest.TestCase):
             processor._FitFileProcessor__write_generic(fit_file, message_type, messages)
 
         self.assertEqual(insert_mock.call_count, 3)
-        self.assertEqual(processor.garmin_mon_db_session.events, ['rollback', 'commit', 'commit'])
+        self.assertEqual(processor.garmin_mon_db_session.events, [])
 
 
 if __name__ == '__main__':
