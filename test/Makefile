@@ -4,8 +4,11 @@
 
 PROJECT_BASE ?= $(CURDIR)/../.
 export VENV=$(PROJECT_BASE)/.venv
+export PYTHONPATH := $(PROJECT_BASE):$(PROJECT_BASE)/utilities:$(PYTHONPATH)
 
 include $(PROJECT_BASE)/defines.mk
+
+export PYTHON_PATH ?= $(VENV)/bin/$(PYTHON)
 
 
 DB_TEST_GROUPS=garmin_db activities_db monitoring_db garmin_summary_db summary_db

@@ -33,6 +33,7 @@ from garmindb import ActivityExporter
 from garmindb import GarminConnectConfigManager, PluginManager
 from garmindb import Statistics
 from garmindb import OpenWithBaseCamp, OpenWithGoogleEarth
+from garmindb.postgres_support import PostgresSupportException
 
 
 logging.basicConfig(filename='garmindb.log', filemode='w', level=logging.INFO)
@@ -267,6 +268,12 @@ class GarminDbMain():
 
     def backup_dbs(self):
         """Backup GarminDb database files."""
+        db_type = self.gc_config.get_db_params().db_type
+        if db_type == 'postgres':
+            message = 'Postgres backup is not supported by GarminDB; use pg_dump with the configured Postgres connection.'
+            logger.warning(message)
+            print(message)
+            return
         dbs = glob.glob(self.gc_config.get_db_dir() + os.sep + '*.db')
         backupfile = self.gc_config.get_backup_dir()  + os.sep + str(int(datetime.datetime.now().timestamp())) + '_dbs.zip'
         logger.info("Backiping up dbs %s to %s", dbs, backupfile)
@@ -388,4 +395,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except PostgresSupportException as e:
+        print(e)
+        sys.exit(1)

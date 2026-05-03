@@ -10,6 +10,7 @@ import platform
 import subprocess
 import datetime
 import tempfile
+from urllib.parse import urlparse, unquote
 
 from idbutils import JsonConfig
 from fitfile import Sport
@@ -66,35 +67,157 @@ class GarminConnectConfigManager(JsonConfig):
         """Return the type (SQLite, MySQL, etc) of database that is configured."""
         return self.get_node_value_default('db', 'type', 'sqlite')
 
-    def get_db_user(self):
+    def get_db_database_url(self):
+        """Return the legacy configured database URL."""
+        return self.get_node_value('db', 'database_url')
+
+    def get_db_username(self):
         """Return the configured username of the database."""
-        return self.get_node_value('db', 'user')
+        return self.get_node_value('db', 'db_username') or self.get_node_value('db', 'user')
 
     def get_db_password(self):
         """Return the configured password of the database."""
-        return self.get_node_value('db', 'password')
+        return self.get_node_value('db', 'db_password') or self.get_node_value('db', 'password')
 
     def get_db_host(self):
         """Return the configured hostname of the database."""
-        return self.get_node_value('db', 'host')
+        return self.get_node_value('db', 'db_host') or self.get_node_value('db', 'host')
+
+    def get_db_port(self):
+        """Return the configured port of the database."""
+        return self.get_node_value('db', 'db_port')
+
+    def get_db_name(self):
+        """Return the configured database name."""
+        return self.get_node_value('db', 'db_name')
 
     def get_db_dir(self, test_dir=False):
         """Return the configured directory of where the database will be stored."""
         return self.__create_dir_if_needed(self.get_base_dir(test_dir) + os.sep + 'DBs')
 
+    @staticmethod
+    def __env_value_from_file(env_file, key_name):
+        if not os.path.isfile(env_file):
+            return None
+        with open(env_file, 'r') as file:
+            for line in file:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                if key.strip() == key_name:
+                    return value.strip().strip('"').strip("'")
+        return None
+
+    @staticmethod
+    def __database_url_from_env_file(env_file):
+        return GarminConnectConfigManager.__env_value_from_file(env_file, 'DATABASE_URL')
+
+    def __database_url_from_env_files(self):
+        for env_file in (self.config_dir + os.sep + '.env', os.getcwd() + os.sep + '.env'):
+            database_url = self.__database_url_from_env_file(env_file)
+            if database_url:
+                return database_url
+        return None
+
+    def get_database_url(self):
+        """Return the configured database URL from config, environment, or .env."""
+        return self.get_db_database_url() or os.environ.get('DATABASE_URL') or self.__database_url_from_env_files()
+
+    @staticmethod
+    def __db_port(port):
+        if port in (None, ''):
+            return None
+        try:
+            return int(port)
+        except ValueError as e:
+            raise ConfigException(f'Invalid db.db_port value: {port}') from e
+
+    def __db_config_value(self, key_name, default):
+        return self.get_node_value('db', key_name) if self.get_node_value('db', key_name) is not None else default
+
+    @staticmethod
+    def __positive_int(value, key_name):
+        try:
+            int_value = int(value)
+        except (TypeError, ValueError) as e:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}') from e
+        if int_value <= 0:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be > 0.')
+        return int_value
+
+    @staticmethod
+    def __non_negative_int(value, key_name):
+        try:
+            int_value = int(value)
+        except (TypeError, ValueError) as e:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}') from e
+        if int_value < 0:
+            raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be >= 0.')
+        return int_value
+
+    def __postgres_runtime_params(self):
+        connect_timeout = self.__positive_int(self.__db_config_value('postgres_connect_timeout_sec', 10), 'postgres_connect_timeout_sec')
+        statement_timeout = self.__non_negative_int(self.__db_config_value('postgres_statement_timeout_ms', 0), 'postgres_statement_timeout_ms')
+        return {
+            'postgres_connect_timeout_sec' : connect_timeout,
+            'postgres_statement_timeout_ms' : statement_timeout
+        }
+
+    @staticmethod
+    def __postgres_db_params_from_url(database_url):
+        if not database_url:
+            return {}
+        parsed = urlparse(database_url)
+        if parsed.scheme not in ('postgres', 'postgresql', 'postgresql+psycopg'):
+            raise ConfigException(f'Unsupported Postgres database URL scheme: {parsed.scheme}')
+        db_name = parsed.path.lstrip('/') or None
+        return {
+            'db_username' : unquote(parsed.username) if parsed.username else None,
+            'db_password' : unquote(parsed.password) if parsed.password else None,
+            'db_host' : parsed.hostname,
+            'db_port' : parsed.port,
+            'db_name' : unquote(db_name) if db_name else None
+        }
+
+    def __configured_db_params(self):
+        return {
+            'db_username' : self.get_db_username(),
+            'db_password' : self.get_db_password(),
+            'db_host' : self.get_db_host(),
+            'db_port' : self.__db_port(self.get_db_port()),
+            'db_name' : self.get_db_name()
+        }
+
+    @staticmethod
+    def __merge_db_params(db_params, fallback_params):
+        for key, value in fallback_params.items():
+            if db_params.get(key) in (None, '') and value not in (None, ''):
+                db_params[key] = value
+        return db_params
+
     def get_db_params(self, test_db=False):
         """Return the database configuration."""
-        db_type = self.get_db_type()
+        db_type = (self.get_db_type() or 'sqlite').lower()
+        if db_type == 'postgresql':
+            db_type = 'postgres'
         db_params = {
             'db_type' : db_type
         }
+        if test_db:
+            db_params['test_db'] = True
         if db_type == 'sqlite':
             db_params['db_path'] = self.get_db_dir(test_db)
         elif db_type == "mysql":
             db_params['db_type'] = 'mysql'
-            db_params['db_username'] = self.get_db_user()
-            db_params['db_password'] = self.get_db_password()
-            db_params['db_host'] = self.get_db_host()
+            db_params.update(self.__configured_db_params())
+        elif db_type == 'postgres':
+            configured_params = self.__configured_db_params()
+            legacy_params = self.__postgres_db_params_from_url(self.get_database_url())
+            db_params.update(self.__merge_db_params(configured_params, legacy_params))
+            if not db_params.get('db_name'):
+                raise ConfigException('Postgres db type requires db.db_name, or a legacy database_url/DATABASE_URL containing a database name.')
+            db_params.update(self.__postgres_runtime_params())
         return DbParams(**db_params)
 
     def get_base_dir(self, test_dir=False):

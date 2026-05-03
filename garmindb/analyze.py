@@ -34,7 +34,12 @@ class Analyze():
         self.garmin_sum_db = GarminSummaryDb(self.gc_config.get_db_params(), debug)
         self.sum_db = summarydb.SummaryDb(self.gc_config.get_db_params(), debug)
         self.garmin_act_db = ActivitiesDb(self.gc_config.get_db_params(), debug)
-        self.measurement_system = Attributes.measurements_type(self.garmin_db)
+        default_measurement_system = (
+            fitfile.field_enums.DisplayMeasure.metric
+            if self.gc_config.get_metric()
+            else fitfile.field_enums.DisplayMeasure.statute
+        )
+        self.measurement_system = Attributes.measurements_type(self.garmin_db, default_measurement_system)
         self.unit_strings = fitfile.units.unit_strings[self.measurement_system]
 
     def __populate_hr_intensity(self, day_date, garmin_mon_session, garmin_sum_session, overwrite=False):

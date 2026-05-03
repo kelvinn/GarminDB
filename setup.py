@@ -46,6 +46,9 @@ setup(name=module_name, version=module_version, author='Tom Goetz',
       url="https://github.com/tcgoetz/GarminDB",
       project_urls={"Bug Tracker": "https://github.com/tcgoetz/GarminDB/issues"},
       install_requires=install_requires,
+      extras_require={
+          'postgres': ['psycopg[binary]>=3']
+      },
       include_package_data=True,
       classifiers=[
           'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
