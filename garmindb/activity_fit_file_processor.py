@@ -292,10 +292,6 @@ class ActivityFitFileProcessor(FitFileProcessor):
         root_logger.debug("row sport entry: %r", message_fields)
         return self._write_stand_up_paddleboarding_entry(fit_file, activity_id, sub_sport, message_fields)
 
-    def _write_kayaking_entry(self, fit_file, activity_id, sub_sport, message_fields):
-        root_logger.debug("kayak sport entry: %r", message_fields)
-        return self._write_stand_up_paddleboarding_entry(fit_file, activity_id, sub_sport, message_fields)
-
     def _write_boating_entry(self, fit_file, activity_id, sub_sport, message_fields):
         root_logger.debug("boating sport entry: %r", message_fields)
 

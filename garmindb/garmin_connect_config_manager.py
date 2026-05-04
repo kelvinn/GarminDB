@@ -156,32 +156,12 @@ class GarminConnectConfigManager(JsonConfig):
             raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be >= 0.')
         return int_value
 
-    @staticmethod
-    def __positive_float(value, key_name):
-        try:
-            float_value = float(value)
-        except (TypeError, ValueError) as e:
-            raise ConfigException(f'Invalid db.{key_name} value: {value}') from e
-        if float_value <= 0:
-            raise ConfigException(f'Invalid db.{key_name} value: {value}. Must be > 0.')
-        return float_value
-
     def __postgres_runtime_params(self):
         connect_timeout = self.__positive_int(self.__db_config_value('postgres_connect_timeout_sec', 10), 'postgres_connect_timeout_sec')
         statement_timeout = self.__non_negative_int(self.__db_config_value('postgres_statement_timeout_ms', 0), 'postgres_statement_timeout_ms')
-        retry_attempts = self.__positive_int(self.__db_config_value('postgres_retry_attempts', 3), 'postgres_retry_attempts')
-        retry_base_backoff = self.__positive_float(self.__db_config_value('postgres_retry_base_backoff_sec', 0.5), 'postgres_retry_base_backoff_sec')
-        retry_max_backoff = self.__positive_float(self.__db_config_value('postgres_retry_max_backoff_sec', 4.0), 'postgres_retry_max_backoff_sec')
-        if retry_max_backoff < retry_base_backoff:
-            raise ConfigException(
-                f'Invalid db.postgres_retry_max_backoff_sec value: {retry_max_backoff}. Must be >= db.postgres_retry_base_backoff_sec ({retry_base_backoff}).'
-            )
         return {
             'postgres_connect_timeout_sec' : connect_timeout,
-            'postgres_statement_timeout_ms' : statement_timeout,
-            'postgres_retry_attempts' : retry_attempts,
-            'postgres_retry_base_backoff_sec' : retry_base_backoff,
-            'postgres_retry_max_backoff_sec' : retry_max_backoff
+            'postgres_statement_timeout_ms' : statement_timeout
         }
 
     @staticmethod

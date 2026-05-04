@@ -10,6 +10,8 @@ from .version_info import version_string
 
 __version__ = version_string()
 
+# idbutils selects backend support through DB class hooks at import time.
+# Importing this module installs no-op-for-non-Postgres hooks before any DBs are created.
 from . import postgres_support
 
 from .activity_fit_plugin_base import ActivityFitPluginBase

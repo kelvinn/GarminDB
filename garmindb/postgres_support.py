@@ -183,15 +183,8 @@ def _install_search_path_event(engine, schema, backend_profile):
 
 def _install_postgres_functions(connection, schema):
     schema_name = _quote_identifier(schema)
-    for function_signature in (
-            'strftime(text, timestamp without time zone)',
-            'strftime(text, date)',
-            'strftime(text, time without time zone)',
-            'strftime(text, text)',
-            'round(double precision, integer)'):
-        connection.execute(text(f'DROP FUNCTION IF EXISTS {schema_name}.{function_signature} CASCADE'))
     connection.execute(text(f"""
-        CREATE FUNCTION {schema_name}.strftime(fmt text, value timestamp without time zone)
+        CREATE OR REPLACE FUNCTION {schema_name}.strftime(fmt text, value timestamp without time zone)
         RETURNS text
         LANGUAGE SQL
         IMMUTABLE
@@ -204,14 +197,14 @@ def _install_postgres_functions(connection, schema):
         $$;
     """))
     connection.execute(text(f"""
-        CREATE FUNCTION {schema_name}.strftime(fmt text, value date)
+        CREATE OR REPLACE FUNCTION {schema_name}.strftime(fmt text, value date)
         RETURNS text
         LANGUAGE SQL
         IMMUTABLE
         AS $$ SELECT {schema_name}.strftime(fmt, value::timestamp) $$;
     """))
     connection.execute(text(f"""
-        CREATE FUNCTION {schema_name}.strftime(fmt text, value time without time zone)
+        CREATE OR REPLACE FUNCTION {schema_name}.strftime(fmt text, value time without time zone)
         RETURNS text
         LANGUAGE SQL
         IMMUTABLE
@@ -224,14 +217,14 @@ def _install_postgres_functions(connection, schema):
         $$;
     """))
     connection.execute(text(f"""
-        CREATE FUNCTION {schema_name}.strftime(fmt text, value text)
+        CREATE OR REPLACE FUNCTION {schema_name}.strftime(fmt text, value text)
         RETURNS text
         LANGUAGE SQL
         IMMUTABLE
         AS $$ SELECT {schema_name}.strftime(fmt, value::time) $$;
     """))
     connection.execute(text(f"""
-        CREATE FUNCTION {schema_name}.round(value double precision, places integer)
+        CREATE OR REPLACE FUNCTION {schema_name}.round(value double precision, places integer)
         RETURNS numeric
         LANGUAGE SQL
         IMMUTABLE

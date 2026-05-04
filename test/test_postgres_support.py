@@ -164,6 +164,16 @@ class TestPostgresSupport(unittest.TestCase):
         self.assertIn('CREATE SCHEMA IF NOT EXISTS "garmin"', connection.executed[0])
         self.assertIn('SET search_path TO "garmin", public', connection.executed[1])
 
+    def test_install_postgres_functions_uses_create_or_replace_without_cascade(self):
+        connection = _FakePreparedConnection()
+        postgres_support._install_postgres_functions(connection, 'garmin')
+
+        ddl = '\n'.join(connection.executed)
+        self.assertIn('CREATE OR REPLACE FUNCTION "garmin".strftime', ddl)
+        self.assertIn('CREATE OR REPLACE FUNCTION "garmin".round', ddl)
+        self.assertNotIn('DROP FUNCTION', ddl)
+        self.assertNotIn('CASCADE', ddl)
+
     def test_latest_time_postgres_time_column_uses_time_min_threshold(self):
         db = SimpleNamespace(db_params=SimpleNamespace(db_type='postgres'))
         time_column = column('total_sleep', Time())

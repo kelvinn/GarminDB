@@ -9,7 +9,6 @@ import sys
 import logging
 import datetime
 import enum
-import os
 
 import fitfile
 from idbutils import JsonFileProcessor, Conversions
@@ -61,12 +60,6 @@ class GarminWeightData(JsonFileProcessor):
 class GarminMonitoringFitData(FitData):
     """Class for importing monitoring FIT files into a database."""
 
-    monitoring_fit_file_suffixes = ('_WELLNESS.fit', '_WELLNESS.FIT', '_HRV_STATUS.fit', '_HRV_STATUS.FIT')
-
-    @classmethod
-    def _is_monitoring_fit_file(cls, file_name):
-        return os.path.basename(file_name).endswith(cls.monitoring_fit_file_suffixes)
-
     def __init__(self, input_dir, latest, measurement_system, debug):
         """
         Return an instance of GarminMonitoringFitData.
@@ -79,8 +72,7 @@ class GarminMonitoringFitData(FitData):
         debug (Boolean): enable debug logging
 
         """
-        super().__init__(input_dir, debug, latest, True, [fitfile.FileType.monitoring_b, fitfile.FileType.hrv_status], measurement_system,
-                         self._is_monitoring_fit_file)
+        super().__init__(input_dir, debug, latest, True, [fitfile.FileType.monitoring_b, fitfile.FileType.hrv_status], measurement_system)
 
 
 class GarminSleepFitData(FitData):

@@ -344,6 +344,10 @@ class ActivitiesDevices(ActivitiesDb.Base, idbutils.DbObject):
 class SportActivities(idbutils.DbObject):
     """Base class for all sport based activity tables."""
 
+    @staticmethod
+    def _sql_string_literal(value):
+        return "'" + str(value).replace("'", "''") + "'"
+
     @declared_attr
     def activity_id(cls):
         return Column(String, ForeignKey(Activities.activity_id), primary_key=True)
@@ -362,11 +366,12 @@ class SportActivities(idbutils.DbObject):
     @classmethod
     def _create_sport_view(cls, db, selectable, sport):
         """Create a database view for a sport based activity type."""
-        filter = literal_column(f"{Activities.__tablename__}.sport = '{sport}'")
+        filter = literal_column(f'{Activities.__tablename__}.sport = {cls._sql_string_literal(sport)}')
         cls.create_join_view(db, f'{sport}_activities_view', selectable, Activities, filter, Activities.start_time.desc())
 
     @classmethod
     def _create_course_view(cls, db, selectable, course_id):
+        course_id = int(course_id)
         filter = literal_column(f'{Activities.__tablename__}.course_id = {course_id}')
         cls.create_join_view(db, f'course_{course_id}_view', selectable, Activities, filter, Activities.start_time.desc())
 
